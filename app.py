@@ -15,84 +15,70 @@ HTML_PAGE = """
 <head>
     <title>Skill Gap Intelligence System</title>
     <style>
-        body { font-family: Arial; padding: 20px; background:#f4f4f4; }
+        body {
+            font-family: Arial;
+            background: #f4f4f4;
+            padding: 20px;
+        }
         input, select, button {
             padding: 10px;
-            width: 100%;
             margin: 8px 0;
+            width: 100%;
         }
         .box {
             background: white;
-            padding: 15px;
-            margin-top: 20px;
-            border-radius: 6px;
+            padding: 20px;
+            border-radius: 8px;
         }
     </style>
 </head>
 <body>
 
-<h2>Skill Gap Intelligence System</h2>
-
-<form method="post">
-    <input name="name" placeholder="Your Name" required>
-
-    <select name="role">
-        {% for role in roles %}
-            <option>{{ role }}</option>
-        {% endfor %}
-    </select>
-
-    <input name="skills" placeholder="Enter skills (comma separated)" required>
-
-    <button type="submit">Analyze</button>
-</form>
-
-{% if result %}
 <div class="box">
-    <p><b>Name:</b> {{ result.name }}</p>
-    <p><b>Role:</b> {{ result.role }}</p>
-    <p><b>Score:</b> {{ result.score }}%</p>
-    <p><b>Matched Skills:</b> {{ result.matched }}</p>
-    <p><b>Missing Skills:</b> {{ result.missing }}</p>
-    <p><b>Insight:</b> {{ result.insight }}</p>
+    <h2>Skill Gap Intelligence System</h2>
+
+    <form method="post">
+        <label>Select Career:</label>
+        <select name="career">
+            <option value="AI Engineer">AI Engineer</option>
+            <option value="Web Developer">Web Developer</option>
+            <option value="Data Analyst">Data Analyst</option>
+        </select>
+
+        <label>Your Skills (comma separated):</label>
+        <input type="text" name="skills" placeholder="python, sql">
+
+        <button type="submit">Analyze Skill Gap</button>
+    </form>
+
+    {% if gap is not none %}
+        <h3>Missing Skills:</h3>
+        {% if gap %}
+            <ul>
+            {% for skill in gap %}
+                <li>{{ skill }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p>🎉 You have all required skills!</p>
+        {% endif %}
+    {% endif %}
 </div>
-{% endif %}
 
 </body>
 </html>
 """
 
 @app.route("/", methods=["GET", "POST"])
-def index():
-    result = None
+def home():
+    gap = None
     if request.method == "POST":
-        name = request.form["name"]
-        role = request.form["role"]
-        skills = set(s.strip().lower() for s in request.form["skills"].split(","))
+        career = request.form.get("career")
+        user_skills = request.form.get("skills", "").lower().replace(" ", "").split(",")
+        required_skills = [s.lower() for s in CAREER_SKILLS.get(career, [])]
+        gap = [s for s in required_skills if s not in user_skills]
 
-        required = set(CAREER_SKILLS[role])
-        matched = skills & required
-        missing = required - skills
-
-        score = int(len(matched) / len(required) * 100)
-
-        if score >= 80:
-            insight = "High readiness"
-        elif score >= 50:
-            insight = "Moderate readiness"
-        else:
-            insight = "Low readiness"
-
-        result = {
-            "name": name,
-            "role": role,
-            "matched": list(matched),
-            "missing": list(missing),
-            "score": score,
-            "insight": insight
-        }
-
-    return render_template_string(HTML_PAGE, roles=CAREER_SKILLS.keys(), result=result)
+    return render_template_string(HTML_PAGE, gap=gap)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
