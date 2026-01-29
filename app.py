@@ -9,62 +9,72 @@ CAREER_SKILLS = {
     "Data Analyst": ["python", "statistics", "sql", "excel"]
 }
 
+# HTML Template
 HTML_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
     <title>Skill Gap Intelligence System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
             font-family: Arial;
-            background: #f4f4f4;
+            background: #f4f6f8;
             padding: 20px;
-        }
-        input, select, button {
-            padding: 10px;
-            margin: 8px 0;
-            width: 100%;
         }
         .box {
+            max-width: 500px;
+            margin: auto;
             background: white;
             padding: 20px;
-            border-radius: 8px;
+            border-radius: 10px;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        ul {
+            padding-left: 20px;
         }
     </style>
 </head>
 <body>
+    <div class="box">
+        <h2>Skill Gap Intelligence System</h2>
+        <form method="post">
+            <label>Select Career</label>
+            <select name="career" required>
+                <option value="AI Engineer">AI Engineer</option>
+                <option value="Web Developer">Web Developer</option>
+                <option value="Data Analyst">Data Analyst</option>
+            </select>
 
-<div class="box">
-    <h2>Skill Gap Intelligence System</h2>
+            <label>Your Skills (comma separated)</label>
+            <input type="text" name="skills" placeholder="python, sql" required>
 
-    <form method="post">
-        <label>Select Career:</label>
-        <select name="career">
-            <option value="AI Engineer">AI Engineer</option>
-            <option value="Web Developer">Web Developer</option>
-            <option value="Data Analyst">Data Analyst</option>
-        </select>
+            <button type="submit">Analyze Skill Gap</button>
+        </form>
 
-        <label>Your Skills (comma separated):</label>
-        <input type="text" name="skills" placeholder="python, sql">
-
-        <button type="submit">Analyze Skill Gap</button>
-    </form>
-
-    {% if gap is not none %}
-        <h3>Missing Skills:</h3>
-        {% if gap %}
-            <ul>
-            {% for skill in gap %}
-                <li>{{ skill }}</li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p>🎉 You have all required skills!</p>
+        {% if gap is not none %}
+            <h3>Missing Skills:</h3>
+            {% if gap %}
+                <ul>
+                {% for skill in gap %}
+                    <li>{{ skill }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>🎉 You have all required skills!</p>
+            {% endif %}
         {% endif %}
-    {% endif %}
-</div>
-
+    </div>
 </body>
 </html>
 """
@@ -81,4 +91,4 @@ def home():
     return render_template_string(HTML_PAGE, gap=gap)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run()
