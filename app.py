@@ -1,125 +1,147 @@
-from flask import Flask, request, redirect, session, render_template_string
+from flask import Flask, redirect, url_for, session, request, render_template_string
+from flask_dance.contrib.google import make_google_blueprint, google
+import os
 
 app = Flask(__name__)
 app.secret_key = "skill-gap-secret-key"
 
-# -------------------- LOGIN PAGE --------------------
-LOGIN_HTML = """
-<h2>Skill Gap Intelligence System</h2>
+# -------------------- GOOGLE OAUTH --------------------
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Only for development
+google_bp = make_google_blueprint(
+    client_id="YOUR_GOOGLE_CLIENT_ID",
+    client_secret="YOUR_GOOGLE_CLIENT_SECRET",
+    scope=["profile", "email"],
+    redirect_url="/profile"
+)
+app.register_blueprint(google_bp, url_prefix="/login")
 
+# -------------------- HOME / LOGIN --------------------
+HOME_HTML = """
+<h2>Skill Gap Intelligence System</h2>
+{% if not logged_in %}
+<a href="{{ url_for('google.login') }}">Login with Google</a>
+{% else %}
+<p>Welcome, {{ name }} ({{ email }})</p>
+<a href="{{ url_for('user_input') }}">Proceed to Skill Input</a><br><br>
+<a href="{{ url_for('logout') }}">Logout</a>
+{% endif %}
+"""
+
+@app.route("/")
+def home():
+    logged_in = False
+    name = email = ""
+    if google.authorized:
+        resp = google.get("/oauth2/v2/userinfo")
+        if resp.ok:
+            info = resp.json()
+            session["user"] = {"email": info["email"], "name": info["name"]}
+            logged_in = True
+            name = info["name"]
+            email = info["email"]
+    return render_template_string(HOME_HTML, logged_in=logged_in, name=name, email=email)
+
+# -------------------- USER INPUT PAGE --------------------
+USER_INPUT_HTML = """
+<h2>Welcome, {{ user['name'] }}</h2>
 <form method="post">
-  <input type="text" name="name" placeholder="Student Name" required><br><br>
-  <input type="email" name="email" placeholder="Email (Login)" required><br><br>
-  <input type="text" name="goal" placeholder="Career Goal (e.g. AI Engineer)" required><br><br>
-  <button type="submit">Login</button>
+  <label>Student Name:</label><br>
+  <input type="text" name="student_name" value="{{ user['name'] }}" required><br><br>
+
+  <label>Skills You Know (comma separated):</label><br>
+  <input type="text" name="skills" placeholder="Python, SQL, ML" required><br><br>
+
+  <label>Career Goal:</label><br>
+  <input type="text" name="goal" placeholder="AI Engineer" required><br><br>
+
+  <button type="submit">Submit</button>
 </form>
 """
 
-@app.route("/", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        session["user"] = {
-            "name": request.form["name"],
-            "email": request.form["email"],
-            "goal": request.form["goal"]
-        }
-        return redirect("/dashboard")
-    return render_template_string(LOGIN_HTML)
-
-# -------------------- DASHBOARD --------------------
-@app.route("/dashboard")
-def dashboard():
-    user = session.get("user")
-    if not user:
-        return redirect("/")
-
-    return f"""
-    <h2>Welcome, {user['name']}</h2>
-    <p><b>Email:</b> {user['email']}</p>
-    <p><b>Career Goal:</b> {user['goal']}</p>
-
-    <a href="/assessment">Start Skill Self-Assessment</a><br><br>
-    <a href="/logout">Logout</a>
-    """
-
-# -------------------- SKILL ASSESSMENT --------------------
-QUESTIONS = {
-    "Python": [
-        "What is a list?",
-        "What is a function?",
-        "What does len() do?"
-    ],
-    "AI": [
-        "What is Machine Learning?",
-        "Difference between AI and ML?",
-        "What is supervised learning?"
-    ]
-}
-
-@app.route("/assessment", methods=["GET", "POST"])
-def assessment():
+@app.route("/input", methods=["GET", "POST"])
+def user_input():
     if "user" not in session:
         return redirect("/")
 
     if request.method == "POST":
-        score = 0
-        total = len(request.form)
+        session["student_name"] = request.form["student_name"]
+        session["skills"] = [s.strip() for s in request.form["skills"].split(",")]
+        session["goal"] = request.form["goal"]
+        return redirect("/suggestion")
 
-        for ans in request.form.values():
-            if ans.strip():
-                score += 1
+    return render_template_string(USER_INPUT_HTML, user=session["user"])
 
-        percentage = int((score / total) * 100)
+# -------------------- AI JOB & SKILL RECOMMENDATION --------------------
+@app.route("/suggestion")
+def suggestion():
+    if "skills" not in session or "goal" not in session:
+        return redirect("/input")
 
-        session["result"] = percentage
-        return redirect("/result")
+    known_skills = session["skills"]
+    goal = session["goal"]
 
-    html = "<h2>Skill Self-Assessment</h2><form method='post'>"
+    # --- AI logic for job suggestions ---
+    job_db = {
+        "Python": ["Backend Developer", "Data Analyst", "Automation Engineer"],
+        "SQL": ["Database Analyst", "Data Engineer"],
+        "ML": ["Machine Learning Engineer", "Data Scientist"],
+        "AI": ["AI Engineer", "Deep Learning Specialist"],
+        "HTML": ["Frontend Developer", "Web Designer"],
+        "JavaScript": ["Frontend Developer", "Full Stack Developer"]
+    }
 
-    for skill, qs in QUESTIONS.items():
-        html += f"<h3>{skill}</h3>"
-        for q in qs:
-            html += f"{q}<br><input name='{q}'><br><br>"
+    suggested_jobs = set()
+    for skill in known_skills:
+        suggested_jobs.update(job_db.get(skill, []))
 
-    html += "<button type='submit'>Submit Assessment</button></form>"
-    return html
+    # --- Skills needed for career goal ---
+    goal_skills_db = {
+        "AI Engineer": ["Python", "ML", "Deep Learning", "Data Structures", "SQL"],
+        "Data Scientist": ["Python", "ML", "Statistics", "SQL", "Data Visualization"],
+        "Backend Developer": ["Python", "Django/Flask", "SQL", "APIs"],
+        "Frontend Developer": ["HTML", "CSS", "JavaScript", "React"],
+        "Full Stack Developer": ["HTML", "CSS", "JavaScript", "Python", "SQL"]
+    }
 
-# -------------------- RESULT & AI RECOMMENDATION --------------------
-@app.route("/result")
-def result():
-    if "result" not in session:
-        return redirect("/dashboard")
+    required_skills = set(goal_skills_db.get(goal, [])) - set(known_skills)
 
-    score = session["result"]
-    goal = session["user"]["goal"]
+    # --- Learning platforms ---
+    learning_platforms = {
+        "Python": "https://www.w3schools.com/python/",
+        "ML": "https://www.coursera.org/learn/machine-learning",
+        "Deep Learning": "https://www.deeplearning.ai/",
+        "SQL": "https://www.w3schools.com/sql/",
+        "Data Structures": "https://www.geeksforgeeks.org/data-structures/",
+        "Statistics": "https://www.khanacademy.org/math/statistics-probability",
+        "Data Visualization": "https://www.datacamp.com/courses/data-visualization",
+        "Django/Flask": "https://realpython.com/",
+        "HTML": "https://www.w3schools.com/html/",
+        "CSS": "https://www.w3schools.com/css/",
+        "JavaScript": "https://www.w3schools.com/js/",
+        "React": "https://reactjs.org/tutorial/tutorial.html"
+    }
 
-    if score < 40:
-        level = "Beginner"
-        recommendation = "Start with basics on Python & AI"
-    elif score < 70:
-        level = "Intermediate"
-        recommendation = "Practice projects & improve weak areas"
+    recommended_links = {skill: learning_platforms[skill] for skill in required_skills if skill in learning_platforms}
+
+    html = f"<h2>Hi, {session['student_name']}</h2>"
+    html += "<h3>Based on your skills, you can consider these jobs:</h3><ul>"
+    for job in suggested_jobs:
+        html += f"<li>{job}</li>"
+    html += "</ul>"
+
+    if required_skills:
+        html += "<h3>Skills you should learn to achieve your goal:</h3><ul>"
+        for skill in required_skills:
+            link = recommended_links.get(skill, "#")
+            html += f"<li>{skill} - <a href='{link}' target='_blank'>Learn Here</a></li>"
+        html += "</ul>"
     else:
-        level = "Advanced"
-        recommendation = "Go for advanced specialization"
+        html += "<h3>You already have all skills needed for your goal!</h3>"
 
-    return f"""
-    <h2>Assessment Result</h2>
-    <p><b>Skill Level:</b> {level}</p>
-    <p><b>Skill Percentage:</b> {score}%</p>
+    html += "<br><a href='/input'>Back to Input Page</a><br>"
+    html += "<a href='/logout'>Logout</a>"
 
-    <h3>AI Recommendation</h3>
-    <p>{recommendation}</p>
-
-    <h4>Free Learning Resources</h4>
-    <ul>
-      <li>Python: https://www.w3schools.com/python/</li>
-      <li>AI Basics: https://www.coursera.org/learn/ai-for-everyone</li>
-      <li>YouTube: freeCodeCamp</li>
-    </ul>
-
-    <a href="/dashboard">Back to Dashboard</a>
-    """
+    return html
 
 # -------------------- LOGOUT --------------------
 @app.route("/logout")
