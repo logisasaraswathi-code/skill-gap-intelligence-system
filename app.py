@@ -1,76 +1,95 @@
 from flask import Flask, request, render_template_string
-import sqlite3
 
 app = Flask(__name__)
 
-# ---------------- DATABASE ----------------
-def get_db():
-    conn = sqlite3.connect("data.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+# ---------------- JOB SKILL DATABASE ----------------
+JOB_SKILLS = {
+    "Data Scientist": ["Python", "Statistics", "Machine Learning", "SQL"],
+    "Web Developer": ["HTML", "CSS", "JavaScript", "Flask"],
+    "AI Engineer": ["Python", "Deep Learning", "TensorFlow", "Maths"],
+    "Cyber Security": ["Networking", "Linux", "Ethical Hacking", "Cryptography"]
+}
 
-# Create table
-conn = get_db()
-conn.execute("""
-CREATE TABLE IF NOT EXISTS skill_gap (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_name TEXT,
-    goal TEXT,
-    current_skills TEXT,
-    required_skills TEXT
-)
-""")
-conn.commit()
-conn.close()
+FREE_PLATFORMS = {
+    "Python": "FreeCodeCamp, W3Schools, YouTube",
+    "Statistics": "Khan Academy, YouTube",
+    "Machine Learning": "Google ML Crash Course, FreeCodeCamp",
+    "SQL": "W3Schools, SQLBolt",
+    "HTML": "FreeCodeCamp, W3Schools",
+    "CSS": "FreeCodeCamp, W3Schools",
+    "JavaScript": "FreeCodeCamp, JavaScript.info",
+    "Flask": "YouTube, FreeCodeCamp",
+    "Deep Learning": "YouTube, Google AI",
+    "TensorFlow": "TensorFlow Official Tutorials",
+    "Maths": "Khan Academy",
+    "Networking": "Cisco Networking Academy",
+    "Linux": "Linux Journey, YouTube",
+    "Ethical Hacking": "Cybrary, YouTube",
+    "Cryptography": "Khan Academy, YouTube"
+}
 
-# ---------------- STUDENT PAGE ----------------
+# ---------------- HOME PAGE ----------------
 @app.route("/", methods=["GET", "POST"])
 def home():
-    submitted_data = None
+    result = None
 
     if request.method == "POST":
-        student_name = request.form.get("student_name")
-        goal = request.form.get("goal")
-        current_skills = request.form.get("current_skills")
-        required_skills = request.form.get("required_skills")
+        name = request.form["name"]
+        job = request.form["job"]
+        current_skills = request.form["skills"].split(",")
 
-        if student_name and goal and current_skills and required_skills:
-            conn = get_db()
-            conn.execute("""
-                INSERT INTO skill_gap
-                (student_name, goal, current_skills, required_skills)
-                VALUES (?, ?, ?, ?)
-            """, (student_name, goal, current_skills, required_skills))
-            conn.commit()
-            conn.close()
+        current_skills = [skill.strip() for skill in current_skills]
+        required_skills = JOB_SKILLS.get(job, [])
 
-            submitted_data = {
-                "student_name": student_name,
-                "goal": goal,
-                "current_skills": current_skills,
-                "required_skills": required_skills
-            }
+        missing_skills = list(set(required_skills) - set(current_skills))
+
+        suggestions = {}
+        for skill in missing_skills:
+            suggestions[skill] = FREE_PLATFORMS.get(skill, "YouTube")
+
+        result = {
+            "name": name,
+            "job": job,
+            "missing_skills": missing_skills,
+            "suggestions": suggestions
+        }
 
     return render_template_string("""
         <h2>Skill Gap Intelligence System</h2>
 
         <form method="post">
-            <input type="text" name="student_name" placeholder="Student Name" required><br><br>
-            <input type="text" name="goal" placeholder="Career Goal" required><br><br>
-            <input type="text" name="current_skills" placeholder="Current Skills" required><br><br>
-            <input type="text" name="required_skills" placeholder="Skills Required" required><br><br>
-            <button type="submit">Submit</button>
+            <input type="text" name="name" placeholder="Student Name" required><br><br>
+
+            <select name="job" required>
+                <option value="">Select Job</option>
+                <option>Data Scientist</option>
+                <option>Web Developer</option>
+                <option>AI Engineer</option>
+                <option>Cyber Security</option>
+            </select><br><br>
+
+            <input type="text" name="skills" placeholder="Your Skills (comma separated)" required><br><br>
+
+            <button type="submit">Check Skill Gap</button>
         </form>
 
-        {% if submitted_data %}
+        {% if result %}
             <hr>
-            <h3>Submitted Details</h3>
-            <p><b>Student Name:</b> {{ submitted_data.student_name }}</p>
-            <p><b>Career Goal:</b> {{ submitted_data.goal }}</p>
-            <p><b>Current Skills:</b> {{ submitted_data.current_skills }}</p>
-            <p><b>Skills Required:</b> {{ submitted_data.required_skills }}</p>
+            <h3>Hello {{ result.name }} 👋</h3>
+            <p><b>Target Job:</b> {{ result.job }}</p>
+
+            {% if result.missing_skills %}
+                <h4>Skills You Need to Learn:</h4>
+                <ul>
+                {% for skill, platform in result.suggestions.items() %}
+                    <li><b>{{ skill }}</b> → Learn from: {{ platform }}</li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p>🎉 You already have all required skills!</p>
+            {% endif %}
         {% endif %}
-    """, submitted_data=submitted_data)
+    """ , result=result)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
