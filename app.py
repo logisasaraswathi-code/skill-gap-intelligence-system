@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # ---------- DATABASE ----------
 def get_db():
-    return sqlite3.connect("interests.db")
+    return sqlite3.connect("interests.db", check_same_thread=False)
 
 def init_db():
     db = get_db()
