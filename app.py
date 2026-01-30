@@ -3,15 +3,14 @@ from flask_dance.contrib.google import make_google_blueprint, google
 import os
 
 app = Flask(__name__)
-app.secret_key = "skill-gap-secret-key"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "default-secret-key")
 
 # -------------------- GOOGLE OAUTH --------------------
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Only for development
 google_bp = make_google_blueprint(
-    client_id="YOUR_GOOGLE_CLIENT_ID",
-    client_secret="YOUR_GOOGLE_CLIENT_SECRET",
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     scope=["profile", "email"],
-    redirect_url="/profile"
+    redirect_url="/login/google/authorized"  # Render will handle the domain automatically
 )
 app.register_blueprint(google_bp, url_prefix="/login")
 
@@ -62,13 +61,11 @@ USER_INPUT_HTML = """
 def user_input():
     if "user" not in session:
         return redirect("/")
-
     if request.method == "POST":
         session["student_name"] = request.form["student_name"]
         session["skills"] = [s.strip() for s in request.form["skills"].split(",")]
         session["goal"] = request.form["goal"]
         return redirect("/suggestion")
-
     return render_template_string(USER_INPUT_HTML, user=session["user"])
 
 # -------------------- AI JOB & SKILL RECOMMENDATION --------------------
@@ -80,7 +77,7 @@ def suggestion():
     known_skills = session["skills"]
     goal = session["goal"]
 
-    # --- AI logic for job suggestions ---
+    # --- Job suggestions ---
     job_db = {
         "Python": ["Backend Developer", "Data Analyst", "Automation Engineer"],
         "SQL": ["Database Analyst", "Data Engineer"],
@@ -94,7 +91,7 @@ def suggestion():
     for skill in known_skills:
         suggested_jobs.update(job_db.get(skill, []))
 
-    # --- Skills needed for career goal ---
+    # --- Skills for career goal ---
     goal_skills_db = {
         "AI Engineer": ["Python", "ML", "Deep Learning", "Data Structures", "SQL"],
         "Data Scientist": ["Python", "ML", "Statistics", "SQL", "Data Visualization"],
@@ -150,4 +147,5 @@ def logout():
     return redirect("/")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
