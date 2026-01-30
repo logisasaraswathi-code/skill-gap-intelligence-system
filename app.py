@@ -1,165 +1,128 @@
 from flask import Flask, request, render_template_string
+import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Career skill requirements
+# ---------- DATABASE ----------
+def get_db():
+    return sqlite3.connect("interests.db")
+
+def init_db():
+    db = get_db()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS student_interest (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            career TEXT,
+            skills TEXT,
+            timestamp TEXT
+        )
+    """)
+    db.commit()
+    db.close()
+
+init_db()
+
+# ---------- SKILLS ----------
 CAREER_SKILLS = {
-    "AI Engineer": {
-        "python": 8,
-        "machine learning": 8,
-        "deep learning": 7,
-        "sql": 6
-    },
-    "Web Developer": {
-        "html": 8,
-        "css": 7,
-        "javascript": 8,
-        "python": 6,
-        "flask": 6
-    },
-    "Data Analyst": {
-        "python": 7,
-        "statistics": 8,
-        "sql": 7,
-        "excel": 6
-    }
+    "AI Engineer": ["python", "machine learning", "deep learning", "sql"],
+    "Web Developer": ["html", "css", "javascript", "python", "flask"],
+    "Data Analyst": ["python", "statistics", "sql", "excel"]
 }
 
-HTML_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Skill Gap Intelligence System</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial;
-            background: #eef2f7;
-            padding: 20px;
-        }
-        .box {
-            max-width: 600px;
-            margin: auto;
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        h2 {
-            text-align: center;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-        }
-        button {
-            background: #4f46e5;
-            color: white;
-            font-size: 16px;
-            border: none;
-        }
-        .result {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f9fafb;
-            border-radius: 8px;
-        }
-        .low {
-            color: red;
-        }
-        .ok {
-            color: green;
-        }
-    </style>
-</head>
-<body>
+# ---------- STUDENT PAGE ----------
+STUDENT_HTML = """
+<h2>Skill Gap Intelligence System</h2>
+<form method="POST">
+    <select name="career" required>
+        <option value="">Select Career</option>
+        {% for c in careers %}
+        <option value="{{c}}">{{c}}</option>
+        {% endfor %}
+    </select><br><br>
 
-<div class="box">
-    <h2>Skill Gap Intelligence System 🚀</h2>
+    <input type="text" name="skills" placeholder="python, sql, ml" required><br><br>
+    <button type="submit">Analyze</button>
+</form>
 
-    <form method="POST">
-        <label>Select Career</label>
-        <select name="career" required>
-            <option value="">--Choose--</option>
-            {% for career in careers %}
-            <option value="{{career}}">{{career}}</option>
-            {% endfor %}
-        </select>
-
-        <label>Your Skills (0–10)</label>
-        <input type="text" name="skills" placeholder="Example: python:6, sql:4, machine learning:5" required>
-
-        <button type="submit">Analyze Skills</button>
-    </form>
-
-    {% if result %}
-    <div class="result">
-        <h3>📊 Analysis Result</h3>
-        <p><b>Readiness Score:</b> {{ score }}%</p>
-
-        <h4>Skill Gaps</h4>
-        <ul>
-            {% for skill, gap in gaps.items() %}
-            <li class="low">{{skill}} → Improve by {{gap}}</li>
-            {% endfor %}
-        </ul>
-
-        <h4>✅ Recommended Focus</h4>
-        <ul>
-            {% for skill in recommendations %}
-            <li class="ok">{{skill}}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-</div>
-
-</body>
-</html>
+{% if msg %}
+<p style="color:green;">{{msg}}</p>
+{% endif %}
 """
 
 @app.route("/", methods=["GET", "POST"])
-def home():
-    result = False
-    gaps = {}
-    recommendations = []
-    score = 0
-
+def student():
+    msg = ""
     if request.method == "POST":
         career = request.form["career"]
-        user_input = request.form["skills"].lower()
+        skills = request.form["skills"]
 
-        user_skills = {}
-        for item in user_input.split(","):
-            skill, level = item.split(":")
-            user_skills[skill.strip()] = int(level.strip())
+        db = get_db()
+        db.execute(
+            "INSERT INTO student_interest (career, skills, timestamp) VALUES (?,?,?)",
+            (career, skills, datetime.now().strftime("%Y-%m-%d %H:%M"))
+        )
+        db.commit()
+        db.close()
 
-        required_skills = CAREER_SKILLS[career]
-        total = len(required_skills)
-        matched = 0
-
-        for skill, required_level in required_skills.items():
-            user_level = user_skills.get(skill, 0)
-            if user_level >= required_level:
-                matched += 1
-            else:
-                gaps[skill] = required_level - user_level
-                recommendations.append(f"Learn {skill} to level {required_level}")
-
-        score = int((matched / total) * 100)
-        result = True
+        msg = "Your interest has been recorded successfully ✅"
 
     return render_template_string(
-        HTML_PAGE,
+        STUDENT_HTML,
         careers=CAREER_SKILLS.keys(),
-        result=result,
-        gaps=gaps,
-        recommendations=recommendations,
-        score=score
+        msg=msg
     )
 
+# ---------- OWNER / ADMIN PAGE ----------
+ADMIN_HTML = """
+<h2>📊 Owner Dashboard</h2>
+
+<p><b>Total Students:</b> {{total}}</p>
+
+<h3>🔥 Career Interest Count</h3>
+<ul>
+{% for c in career_data %}
+<li>{{c[0]}} → {{c[1]}}</li>
+{% endfor %}
+</ul>
+
+<h3>🕒 Recent Searches</h3>
+<ul>
+{% for r in recent %}
+<li>{{r[0]}} | {{r[1]}} | {{r[2]}}</li>
+{% endfor %}
+</ul>
+"""
+
+@app.route("/admin")
+def admin():
+    db = get_db()
+
+    total = db.execute("SELECT COUNT(*) FROM student_interest").fetchone()[0]
+
+    career_data = db.execute("""
+        SELECT career, COUNT(*) 
+        FROM student_interest 
+        GROUP BY career
+        ORDER BY COUNT(*) DESC
+    """).fetchall()
+
+    recent = db.execute("""
+        SELECT career, skills, timestamp 
+        FROM student_interest 
+        ORDER BY id DESC 
+        LIMIT 5
+    """).fetchall()
+
+    db.close()
+
+    return render_template_string(
+        ADMIN_HTML,
+        total=total,
+        career_data=career_data,
+        recent=recent
+    )
+
+# ---------- RUN ----------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
