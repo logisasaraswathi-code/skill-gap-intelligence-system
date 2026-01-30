@@ -3,7 +3,7 @@ import sqlite3
 
 app = Flask(__name__)
 
-# ---------------- DATABASE ----------------
+# ---------- DATABASE ----------
 def get_db():
     conn = sqlite3.connect("skills.db")
     conn.row_factory = sqlite3.Row
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS students (
 conn.commit()
 conn.close()
 
-# ---------------- JOB DATA ----------------
+# ---------- JOB SKILLS ----------
 JOB_SKILLS = {
     "Data Scientist": ["Python", "Statistics", "Machine Learning", "SQL"],
     "Web Developer": ["HTML", "CSS", "JavaScript", "Flask"],
@@ -30,24 +30,7 @@ JOB_SKILLS = {
     "Cyber Security": ["Networking", "Linux", "Ethical Hacking"]
 }
 
-FREE_PLATFORMS = {
-    "Python": "FreeCodeCamp, W3Schools",
-    "Statistics": "Khan Academy",
-    "Machine Learning": "Google ML Crash Course",
-    "SQL": "SQLBolt",
-    "HTML": "FreeCodeCamp",
-    "CSS": "FreeCodeCamp",
-    "JavaScript": "FreeCodeCamp",
-    "Flask": "YouTube",
-    "Deep Learning": "YouTube",
-    "TensorFlow": "TensorFlow Official",
-    "Maths": "Khan Academy",
-    "Networking": "Cisco Academy",
-    "Linux": "Linux Journey",
-    "Ethical Hacking": "Cybrary"
-}
-
-# ---------------- STUDENT PAGE ----------------
+# ---------- MAIN PAGE ----------
 @app.route("/", methods=["GET", "POST"])
 def home():
     result = None
@@ -68,66 +51,13 @@ def home():
         conn.commit()
         conn.close()
 
-        suggestions = {s: FREE_PLATFORMS.get(s, "YouTube") for s in missing}
-
         result = {
             "name": name,
             "job": job,
-            "missing": missing,
-            "suggestions": suggestions
+            "missing": missing
         }
 
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Skill Gap Intelligence</title>
-<style>
-body{font-family:Arial;background:#f0f2f5;padding:20px}
-.card{background:white;max-width:420px;margin:auto;padding:20px;border-radius:10px}
-input,select,button{width:100%;padding:10px;margin-top:10px}
-button{background:#4CAF50;color:white;border:none}
-.skill{background:#eee;padding:8px;margin-top:5px;border-radius:5px}
-</style>
-</head>
-<body>
-<div class="card">
-<h2>Skill Gap Intelligence System</h2>
-<form method="post">
-<input name="name" placeholder="Student Name" required>
-<select name="job" required>
-<option value="">Select Career</option>
-<option>Data Scientist</option>
-<option>Web Developer</option>
-<option>AI Engineer</option>
-<option>Cyber Security</option>
-</select>
-<input name="skills" placeholder="Your Skills (comma separated)" required>
-<button>Analyze</button>
-</form>
-
-{% if result %}
-<hr>
-<h3>Hello {{ result.name }}</h3>
-<p><b>Career:</b> {{ result.job }}</p>
-
-{% if result.missing %}
-<p><b>Skills to Learn:</b></p>
-{% for s, p in result.suggestions.items() %}
-<div class="skill"><b>{{ s }}</b> → {{ p }}</div>
-{% endfor %}
-{% else %}
-<p>🎉 All required skills matched!</p>
-{% endif %}
-{% endif %}
-</div>
-</body>
-</html>
-""", result=result)
-
-# ---------------- ADMIN DASHBOARD ----------------
-@app.route("/admin")
-def admin():
+    # Fetch all students for admin view
     conn = get_db()
     students = conn.execute("SELECT * FROM students").fetchall()
     conn.close()
@@ -136,16 +66,58 @@ def admin():
 <!DOCTYPE html>
 <html>
 <head>
-<title>Admin Dashboard</title>
+<title>Skill Gap Intelligence System</title>
 <style>
-body{font-family:Arial;background:#222;color:white;padding:20px}
-table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #555;padding:10px}
-th{background:#444}
+body{font-family:Arial;background:#f4f6f8;padding:20px}
+.card{background:white;max-width:450px;margin:auto;padding:20px;border-radius:10px}
+input,select,button{width:100%;padding:10px;margin-top:10px}
+button{background:#4CAF50;color:white;border:none}
+.skill{background:#eee;padding:8px;margin-top:5px;border-radius:5px}
+table{width:100%;border-collapse:collapse;margin-top:30px}
+th,td{border:1px solid #ccc;padding:8px}
+th{background:#ddd}
 </style>
 </head>
+
 <body>
-<h2>Admin Dashboard</h2>
+
+<div class="card">
+<h2>Skill Gap Intelligence System</h2>
+
+<form method="post">
+<input name="name" placeholder="Student Name" required>
+
+<select name="job" required>
+<option value="">Select Career</option>
+<option>Data Scientist</option>
+<option>Web Developer</option>
+<option>AI Engineer</option>
+<option>Cyber Security</option>
+</select>
+
+<input name="skills" placeholder="Your Skills (comma separated)" required>
+
+<button>Submit</button>
+</form>
+
+{% if result %}
+<hr>
+<h3>Hello {{ result.name }}</h3>
+<p><b>Career Goal:</b> {{ result.job }}</p>
+
+{% if result.missing %}
+<p><b>Skills to Learn:</b></p>
+{% for s in result.missing %}
+<div class="skill">{{ s }}</div>
+{% endfor %}
+{% else %}
+<p>🎉 All required skills matched!</p>
+{% endif %}
+{% endif %}
+</div>
+
+<!-- ADMIN VIEW -->
+<h2 style="margin-top:40px;">Admin View (All Students Data)</h2>
 <table>
 <tr>
 <th>ID</th>
@@ -164,10 +136,11 @@ th{background:#444}
 </tr>
 {% endfor %}
 </table>
+
 </body>
 </html>
-""", students=students)
+""", result=result, students=students)
 
-# ---------------- RUN ----------------
+# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(debug=True)
