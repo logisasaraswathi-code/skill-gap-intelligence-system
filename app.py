@@ -1,128 +1,111 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, redirect, render_template_string
 import sqlite3
-from datetime import datetime
 
 app = Flask(__name__)
 
-# ---------- DATABASE ----------
+# ---------------- DATABASE ----------------
 def get_db():
-    return sqlite3.connect("interests.db", check_same_thread=False)
+    conn = sqlite3.connect("data.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def init_db():
-    db = get_db()
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS student_interest (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            career TEXT,
-            skills TEXT,
-            timestamp TEXT
-        )
-    """)
-    db.commit()
-    db.close()
+# Create table if not exists
+conn = get_db()
+conn.execute("""
+CREATE TABLE IF NOT EXISTS interests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    interest TEXT,
+    likes INTEGER DEFAULT 0
+)
+""")
+conn.commit()
+conn.close()
 
-init_db()
-
-# ---------- SKILLS ----------
-CAREER_SKILLS = {
-    "AI Engineer": ["python", "machine learning", "deep learning", "sql"],
-    "Web Developer": ["html", "css", "javascript", "python", "flask"],
-    "Data Analyst": ["python", "statistics", "sql", "excel"]
-}
-
-# ---------- STUDENT PAGE ----------
-STUDENT_HTML = """
-<h2>Skill Gap Intelligence System</h2>
-<form method="POST">
-    <select name="career" required>
-        <option value="">Select Career</option>
-        {% for c in careers %}
-        <option value="{{c}}">{{c}}</option>
-        {% endfor %}
-    </select><br><br>
-
-    <input type="text" name="skills" placeholder="python, sql, ml" required><br><br>
-    <button type="submit">Analyze</button>
-</form>
-
-{% if msg %}
-<p style="color:green;">{{msg}}</p>
-{% endif %}
-"""
-
+# ---------------- HOME / STUDENT PAGE ----------------
 @app.route("/", methods=["GET", "POST"])
-def student():
-    msg = ""
+def home():
     if request.method == "POST":
-        career = request.form["career"]
-        skills = request.form["skills"]
+        interest = request.form.get("interest")
 
-        db = get_db()
-        db.execute(
-            "INSERT INTO student_interest (career, skills, timestamp) VALUES (?,?,?)",
-            (career, skills, datetime.now().strftime("%Y-%m-%d %H:%M"))
-        )
-        db.commit()
-        db.close()
+        if interest:
+            conn = get_db()
+            conn.execute(
+                "INSERT INTO interests (interest) VALUES (?)",
+                (interest,)
+            )
+            conn.commit()
+            conn.close()
 
-        msg = "Your interest has been recorded successfully ✅"
+        return redirect("/")
 
-    return render_template_string(
-        STUDENT_HTML,
-        careers=CAREER_SKILLS.keys(),
-        msg=msg
+    conn = get_db()
+    data = conn.execute("SELECT * FROM interests").fetchall()
+    conn.close()
+
+    return render_template_string("""
+        <h2>Skill Gap Intelligence System</h2>
+
+        <form method="post">
+            <input type="text" name="interest" placeholder="Enter skill / interest" required>
+            <button type="submit">Submit</button>
+        </form>
+
+        <h3>Student Interests</h3>
+        <ul>
+            {% for row in data %}
+                <li>
+                    {{ row.interest }} —
+                    Likes: {{ row.likes }}
+                    <a href="/like/{{ row.id }}">👍 Like</a>
+                </li>
+            {% endfor %}
+        </ul>
+
+        <br>
+        <a href="/admin">Go to Admin Page</a>
+    """, data=data)
+
+# ---------------- LIKE FEATURE ----------------
+@app.route("/like/<int:id>")
+def like(id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE interests SET likes = likes + 1 WHERE id = ?",
+        (id,)
     )
+    conn.commit()
+    conn.close()
+    return redirect("/")
 
-# ---------- OWNER / ADMIN PAGE ----------
-ADMIN_HTML = """
-<h2>📊 Owner Dashboard</h2>
-
-<p><b>Total Students:</b> {{total}}</p>
-
-<h3>🔥 Career Interest Count</h3>
-<ul>
-{% for c in career_data %}
-<li>{{c[0]}} → {{c[1]}}</li>
-{% endfor %}
-</ul>
-
-<h3>🕒 Recent Searches</h3>
-<ul>
-{% for r in recent %}
-<li>{{r[0]}} | {{r[1]}} | {{r[2]}}</li>
-{% endfor %}
-</ul>
-"""
-
+# ---------------- ADMIN PAGE ----------------
 @app.route("/admin")
 def admin():
-    db = get_db()
+    conn = get_db()
+    data = conn.execute("SELECT * FROM interests").fetchall()
+    conn.close()
 
-    total = db.execute("SELECT COUNT(*) FROM student_interest").fetchone()[0]
+    return render_template_string("""
+        <h1>Admin Dashboard</h1>
 
-    career_data = db.execute("""
-        SELECT career, COUNT(*) 
-        FROM student_interest 
-        GROUP BY career
-        ORDER BY COUNT(*) DESC
-    """).fetchall()
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>ID</th>
+                <th>Interest</th>
+                <th>Likes</th>
+            </tr>
+            {% for row in data %}
+            <tr>
+                <td>{{ row.id }}</td>
+                <td>{{ row.interest }}</td>
+                <td>{{ row.likes }}</td>
+            </tr>
+            {% endfor %}
+        </table>
 
-    recent = db.execute("""
-        SELECT career, skills, timestamp 
-        FROM student_interest 
-        ORDER BY id DESC 
-        LIMIT 5
-    """).fetchall()
+        <br>
+        <a href="/">Back to Student Page</a>
+    """, data=data)
 
-    db.close()
-
-    return render_template_string(
-        ADMIN_HTML,
-        total=total,
-        career_data=career_data,
-        recent=recent
-    )
-
-# ---------- RUN ----------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run()
