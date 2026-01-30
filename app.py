@@ -14,6 +14,8 @@ conn = get_db()
 conn.execute("""
 CREATE TABLE IF NOT EXISTS skill_gap (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_name TEXT,
+    course_achieved TEXT,
     goal TEXT,
     current_skills TEXT,
     required_skills TEXT,
@@ -27,16 +29,19 @@ conn.close()
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
+        student_name = request.form.get("student_name")
+        course_achieved = request.form.get("course_achieved")
         goal = request.form.get("goal")
         current_skills = request.form.get("current_skills")
         required_skills = request.form.get("required_skills")
 
-        if goal and current_skills and required_skills:
+        if student_name and course_achieved and goal:
             conn = get_db()
             conn.execute("""
-                INSERT INTO skill_gap (goal, current_skills, required_skills)
-                VALUES (?, ?, ?)
-            """, (goal, current_skills, required_skills))
+                INSERT INTO skill_gap 
+                (student_name, course_achieved, goal, current_skills, required_skills)
+                VALUES (?, ?, ?, ?, ?)
+            """, (student_name, course_achieved, goal, current_skills, required_skills))
             conn.commit()
             conn.close()
 
@@ -50,6 +55,8 @@ def home():
         <h2>Skill Gap Intelligence System</h2>
 
         <form method="post">
+            <input type="text" name="student_name" placeholder="Student Name" required><br><br>
+            <input type="text" name="course_achieved" placeholder="Course Achieved" required><br><br>
             <input type="text" name="goal" placeholder="Career Goal" required><br><br>
             <input type="text" name="current_skills" placeholder="Current Skills" required><br><br>
             <input type="text" name="required_skills" placeholder="Skills Required to Achieve Goal" required><br><br>
@@ -60,6 +67,8 @@ def home():
         <ul>
             {% for row in data %}
                 <li>
+                    <b>Name:</b> {{ row.student_name }} <br>
+                    <b>Course Achieved:</b> {{ row.course_achieved }} <br>
                     <b>Goal:</b> {{ row.goal }} <br>
                     <b>Current Skills:</b> {{ row.current_skills }} <br>
                     <b>Required Skills:</b> {{ row.required_skills }} <br>
@@ -98,6 +107,8 @@ def admin():
         <table border="1" cellpadding="8">
             <tr>
                 <th>ID</th>
+                <th>Name</th>
+                <th>Course Achieved</th>
                 <th>Goal</th>
                 <th>Current Skills</th>
                 <th>Required Skills</th>
@@ -106,6 +117,8 @@ def admin():
             {% for row in data %}
             <tr>
                 <td>{{ row.id }}</td>
+                <td>{{ row.student_name }}</td>
+                <td>{{ row.course_achieved }}</td>
                 <td>{{ row.goal }}</td>
                 <td>{{ row.current_skills }}</td>
                 <td>{{ row.required_skills }}</td>
@@ -116,7 +129,7 @@ def admin():
 
         <br>
         <a href="/">Back to Student Page</a>
-    """ , data=data)
+    """, data=data)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
