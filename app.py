@@ -66,6 +66,7 @@ def home():
     """, data=data)
 
 # ---------------- LIKE FEATURE ----------------
+
 @app.route("/like/<int:id>")
 def like(id):
     conn = get_db()
@@ -99,7 +100,16 @@ def admin():
                 <td>{{ row.interest }}</td>
                 <td>{{ row.likes }}</td>
             </tr>
-            {% endfor %}
+    @app.route("/like/<int:id>")
+def like(id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE interests SET likes = likes + 1 WHERE id = ?",
+        (id,)
+    )
+    conn.commit()
+    conn.close()
+    return redirect("/")        {% endfor %}
         </table>
 
         <br>
