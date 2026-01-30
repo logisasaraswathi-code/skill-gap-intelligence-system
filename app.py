@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS students (
 conn.commit()
 conn.close()
 
-# ---------------- DATA ----------------
+# ---------------- JOB DATA ----------------
 JOB_SKILLS = {
     "Data Scientist": ["Python", "Statistics", "Machine Learning", "SQL"],
     "Web Developer": ["HTML", "CSS", "JavaScript", "Flask"],
@@ -31,7 +31,7 @@ JOB_SKILLS = {
 }
 
 FREE_PLATFORMS = {
-    "Python": "FreeCodeCamp",
+    "Python": "FreeCodeCamp, W3Schools",
     "Statistics": "Khan Academy",
     "Machine Learning": "Google ML Crash Course",
     "SQL": "SQLBolt",
@@ -59,7 +59,6 @@ def home():
 
         required = JOB_SKILLS[job]
         missing = list(set(required) - set(skills))
-        suggestions = {s: FREE_PLATFORMS.get(s, "YouTube") for s in missing}
 
         conn = get_db()
         conn.execute(
@@ -69,11 +68,13 @@ def home():
         conn.commit()
         conn.close()
 
+        suggestions = {s: FREE_PLATFORMS.get(s, "YouTube") for s in missing}
+
         result = {
             "name": name,
             "job": job,
-            "suggestions": suggestions,
-            "missing": missing
+            "missing": missing,
+            "suggestions": suggestions
         }
 
     return render_template_string("""
@@ -116,7 +117,7 @@ button{background:#4CAF50;color:white;border:none}
 <div class="skill"><b>{{ s }}</b> → {{ p }}</div>
 {% endfor %}
 {% else %}
-<p>🎉 All skills matched!</p>
+<p>🎉 All required skills matched!</p>
 {% endif %}
 {% endif %}
 </div>
@@ -139,7 +140,7 @@ def admin():
 <style>
 body{font-family:Arial;background:#222;color:white;padding:20px}
 table{width:100%;border-collapse:collapse}
-th,td{border:1px solid #555;padding:10px;text-align:left}
+th,td{border:1px solid #555;padding:10px}
 th{background:#444}
 </style>
 </head>
