@@ -1,144 +1,105 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
 
-# ---------------------------
-# Sample AI Knowledge Base
-# ---------------------------
-
 CAREER_SKILLS = {
-    "data scientist": ["Python", "Machine Learning", "SQL"],
-    "web developer": ["HTML", "CSS", "JavaScript"],
+    "Data Scientist": ["Python", "Machine Learning", "SQL"],
+    "Web Developer": ["HTML", "CSS", "JavaScript"]
 }
 
-QUESTIONS = {
-    "Python": [
-        {
-            "question": "What is the output of print(type([]))?",
-            "options": ["list", "<class 'list'>", "array", "tuple"],
-            "answer": "<class 'list'>"
-        },
-        {
-            "question": "Which keyword is used to create a function?",
-            "options": ["def", "func", "function", "lambda"],
-            "answer": "def"
-        }
-    ],
-    "Machine Learning": [
-        {
-            "question": "What is supervised learning?",
-            "options": [
-                "Uses labeled data",
-                "Uses unlabeled data",
-                "No data",
-                "Random guessing"
-            ],
-            "answer": "Uses labeled data"
-        },
-        {
-            "question": "Which algorithm is used for regression?",
-            "options": ["Linear Regression", "KNN", "K-Means", "Apriori"],
-            "answer": "Linear Regression"
-        }
-    ],
-    "SQL": [
-        {
-            "question": "Which command is used to fetch data?",
-            "options": ["GET", "FETCH", "SELECT", "EXTRACT"],
-            "answer": "SELECT"
-        },
-        {
-            "question": "Which SQL clause is used to filter records?",
-            "options": ["WHERE", "FROM", "TABLE", "ORDER"],
-            "answer": "WHERE"
-        }
-    ]
+FREE_RESOURCES = {
+    "Python": "FreeCodeCamp Python, W3Schools",
+    "Machine Learning": "Google ML Crash Course, StatQuest",
+    "SQL": "SQLBolt, W3Schools SQL",
+    "HTML": "MDN HTML",
+    "CSS": "CSS Tricks",
+    "JavaScript": "JavaScript.info"
 }
 
-RECOMMENDATIONS = {
-    "Python": [
-        "FreeCodeCamp Python Course (YouTube)",
-        "W3Schools Python Tutorial"
-    ],
-    "Machine Learning": [
-        "Google ML Crash Course",
-        "StatQuest ML Playlist (YouTube)"
-    ],
-    "SQL": [
-        "SQLBolt",
-        "W3Schools SQL Tutorial"
-    ]
-}
+HOME_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<title>Skill Gap Intelligence System</title>
+<style>
+body{font-family:Arial;background:#f5f6fa}
+.card{max-width:400px;margin:auto;background:white;padding:20px;border-radius:10px}
+button{background:green;color:white;padding:10px;border:none;width:100%}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>Skill Gap Intelligence System</h2>
+<form method="POST">
+<input name="name" placeholder="Student Name" required><br><br>
+<select name="career" required>
+<option>Data Scientist</option>
+<option>Web Developer</option>
+</select><br><br>
+<input name="skills" placeholder="Your skills (comma separated)" required><br><br>
+<button type="submit">Analyze Skills</button>
+</form>
+</div>
+</body>
+</html>
+"""
 
-# ---------------------------
-# Routes
-# ---------------------------
+RESULT_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<title>Result</title>
+</head>
+<body style="font-family:Arial">
+<h2>Hello {{name}}</h2>
+<h3>Career Goal: {{career}}</h3>
 
-@app.route("/", methods=["GET"])
+<h3>Skill Analysis</h3>
+<ul>
+{% for s,p in scores.items() %}
+<li>{{s}} : {{p}}%</li>
+{% endfor %}
+</ul>
+
+<h3>AI Recommendations</h3>
+<ul>
+{% for r in recs %}
+<li>{{r}}</li>
+{% endfor %}
+</ul>
+
+<a href="/">Go Back</a>
+</body>
+</html>
+"""
+
+@app.route("/", methods=["GET", "POST"])
 def home():
-    return jsonify({"message": "Skill Gap Intelligence System is running"})
+    if request.method == "POST":
+        name = request.form["name"]
+        career = request.form["career"]
+        user_skills = [s.strip() for s in request.form["skills"].split(",")]
 
+        required = CAREER_SKILLS[career]
+        scores = {}
+        recommendations = []
 
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.json
-    email = data.get("email")
+        for skill in required:
+            if skill in user_skills:
+                scores[skill] = 90
+            else:
+                scores[skill] = 30
+                recommendations.append(f"{skill} → {FREE_RESOURCES[skill]}")
 
-    if not email:
-        return jsonify({"error": "Email required"}), 400
+        return render_template_string(
+            RESULT_HTML,
+            name=name,
+            career=career,
+            scores=scores,
+            recs=recommendations
+        )
 
-    return jsonify({
-        "message": "Login successful",
-        "email": email
-    })
-
-
-@app.route("/get-questions", methods=["POST"])
-def get_questions():
-    data = request.json
-    career = data.get("career").lower()
-
-    skills = CAREER_SKILLS.get(career)
-    if not skills:
-        return jsonify({"error": "Career not found"}), 404
-
-    quiz = {}
-    for skill in skills:
-        quiz[skill] = QUESTIONS.get(skill, [])
-
-    return jsonify({
-        "career": career,
-        "questions": quiz
-    })
-
-
-@app.route("/submit-answers", methods=["POST"])
-def submit_answers():
-    data = request.json
-    answers = data.get("answers")
-
-    results = {}
-    recommendations = {}
-
-    for skill, user_answers in answers.items():
-        questions = QUESTIONS.get(skill, [])
-        correct = 0
-
-        for i, q in enumerate(questions):
-            if user_answers[i] == q["answer"]:
-                correct += 1
-
-        score = int((correct / len(questions)) * 100)
-        results[skill] = score
-
-        if score < 70:
-            recommendations[skill] = RECOMMENDATIONS.get(skill, [])
-
-    return jsonify({
-        "skill_levels": results,
-        "recommendations": recommendations
-    })
-
+    return render_template_string(HOME_HTML)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
