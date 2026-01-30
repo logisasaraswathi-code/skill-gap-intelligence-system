@@ -1,217 +1,184 @@
-from flask import Flask, request, redirect, session, render_template_string
-import sqlite3, hashlib, datetime, json
+from flask import Flask, request, render_template_string
+import sqlite3
+import os
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
 
 # ---------------- DATABASE ----------------
+DB_NAME = "skills.db"
+
 def get_db():
-    conn = sqlite3.connect("skill_ai.db")
+    conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
-db = get_db()
-db.executescript("""
-CREATE TABLE IF NOT EXISTS users(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    email TEXT UNIQUE,
-    password TEXT,
-    role TEXT,
-    department TEXT
-);
+def init_db():
+    conn = get_db()
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS students (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        career TEXT,
+        current_skills TEXT,
+        missing_skills TEXT
+    )
+    """)
+    conn.commit()
+    conn.close()
 
-CREATE TABLE IF NOT EXISTS skills(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    skill TEXT,
-    level INTEGER,
-    updated_at TEXT
-);
-""")
-db.commit()
-db.close()
+init_db()
 
 # ---------------- JOB SKILLS ----------------
 JOB_SKILLS = {
     "Data Scientist": ["Python", "Statistics", "Machine Learning", "SQL"],
     "Web Developer": ["HTML", "CSS", "JavaScript", "Flask"],
-    "AI Engineer": ["Python", "Deep Learning", "Maths", "TensorFlow"],
+    "AI Engineer": ["Python", "Deep Learning", "TensorFlow", "Maths"],
     "Cyber Security": ["Networking", "Linux", "Ethical Hacking"]
 }
 
-RECOMMEND = {
-    "Python": "Python Crash Course (YouTube)",
-    "Machine Learning": "Andrew Ng ML Course",
-    "Flask": "Flask Mega Tutorial",
-    "TensorFlow": "TensorFlow Official Tutorials",
-}
-
-# ---------------- HELPERS ----------------
-def hash_pass(p):
-    return hashlib.sha256(p.encode()).hexdigest()
-
-def login_required():
-    return "user" in session
-
-# ---------------- AUTH ----------------
-@app.route("/", methods=["GET","POST"])
-def login():
-    if request.method == "POST":
-        email = request.form["email"]
-        pwd = hash_pass(request.form["password"])
-
-        db = get_db()
-        user = db.execute("SELECT * FROM users WHERE email=? AND password=?", (email,pwd)).fetchone()
-        db.close()
-
-        if user:
-            session["user"] = dict(user)
-            return redirect("/dashboard")
-
-    return render_template_string("""
-    <h2>Login</h2>
-    <form method="post">
-    <input name="email" placeholder="Email"><br>
-    <input name="password" type="password" placeholder="Password"><br>
-    <button>Login</button>
-    </form>
-    <a href="/register">Register</a>
-    """)
-
-@app.route("/register", methods=["GET","POST"])
-def register():
-    if request.method == "POST":
-        db = get_db()
-        db.execute(
-            "INSERT INTO users(name,email,password,role,department) VALUES(?,?,?,?,?)",
-            (request.form["name"],request.form["email"],
-             hash_pass(request.form["password"]),
-             request.form["role"],request.form["dept"])
-        )
-        db.commit()
-        db.close()
-        return redirect("/")
-    return render_template_string("""
-    <h2>Register</h2>
-    <form method="post">
-    <input name="name" placeholder="Name"><br>
-    <input name="email" placeholder="Email"><br>
-    <input name="password" type="password"><br>
-    <select name="role">
-      <option>User</option>
-      <option>Manager</option>
-      <option>Admin</option>
-    </select><br>
-    <input name="dept" placeholder="Department"><br>
-    <button>Register</button>
-    </form>
-    """)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
-
-# ---------------- DASHBOARD ----------------
-@app.route("/dashboard", methods=["GET","POST"])
-def dashboard():
-    if not login_required(): return redirect("/")
-
-    user = session["user"]
-    gap = []
-    chart = {}
+# ---------------- HOME (USER PAGE) ----------------
+@app.route("/", methods=["GET", "POST"])
+def home():
+    result = None
 
     if request.method == "POST":
+        name = request.form["name"]
         career = request.form["career"]
-        for skill in JOB_SKILLS[career]:
-            level = int(request.form.get(skill,0))
-            db = get_db()
-            db.execute("INSERT INTO skills(user_id,skill,level,updated_at) VALUES(?,?,?,?)",
-                (user["id"],skill,level,str(datetime.date.today())))
-            db.commit()
-            db.close()
+        skills = [s.strip().lower() for s in request.form["skills"].split(",")]
 
-    db = get_db()
-    user_skills = db.execute("SELECT * FROM skills WHERE user_id=?", (user["id"],)).fetchall()
-    db.close()
+        required = [r.lower() for r in JOB_SKILLS[career]]
+        missing = list(set(required) - set(skills))
 
-    skill_levels = {s["skill"]:s["level"] for s in user_skills}
-    career = request.args.get("career","Data Scientist")
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO students (name, career, current_skills, missing_skills) VALUES (?, ?, ?, ?)",
+            (
+                name,
+                career,
+                ", ".join(skills),
+                ", ".join(missing)
+            )
+        )
+        conn.commit()
+        conn.close()
 
-    for s in JOB_SKILLS[career]:
-        lvl = skill_levels.get(s,0)
-        if lvl < 3:
-            gap.append((s,3-lvl))
-
-    chart = {k:skill_levels.get(k,0) for k in JOB_SKILLS[career]}
+        result = {
+            "name": name,
+            "career": career,
+            "missing": missing
+        }
 
     return render_template_string("""
-    <h2>Welcome {{u.name}} ({{u.role}})</h2>
-    <a href="/logout">Logout</a><hr>
+<!DOCTYPE html>
+<html>
+<head>
+<title>Skill Gap Intelligence System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Arial;background:#f2f4f7;padding:20px}
+.card{background:#fff;max-width:420px;margin:auto;padding:20px;border-radius:12px;box-shadow:0 0 10px #ccc}
+input,select,button{width:100%;padding:12px;margin-top:10px;border-radius:6px;border:1px solid #ccc}
+button{background:#4CAF50;color:white;border:none;font-size:16px}
+.skill{background:#eee;padding:8px;margin-top:6px;border-radius:5px}
+a{display:block;text-align:center;margin-top:15px}
+</style>
+</head>
 
-    <form method="post">
-    <h3>Select Career</h3>
-    <select name="career">
-    {% for c in jobs %}<option>{{c}}</option>{% endfor %}
-    </select><br><br>
+<body>
 
-    {% for s in jobs[career] %}
-      {{s}}:
-      <input type="range" min="0" max="5" name="{{s}}"><br>
-    {% endfor %}
-    <button>Save Skills</button>
-    </form>
+<div class="card">
+<h2>Skill Gap Intelligence System</h2>
 
-    <h3>Skill Gaps</h3>
-    {% for g in gap %}
-      <p>{{g[0]}} → Learn {{g[1]}} level(s)</p>
-      <small>Recommended: {{rec.get(g[0],'General Learning')}}</small>
-    {% endfor %}
+<form method="post">
+<input name="name" placeholder="Student Name" required>
 
-    <h3>Skill Chart</h3>
-    <canvas id="c"></canvas>
+<select name="career" required>
+<option value="">Select Career</option>
+{% for c in jobs %}
+<option>{{ c }}</option>
+{% endfor %}
+</select>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-new Chart(document.getElementById("c"),{
- type:'radar',
- data:{
- labels: {{chart.keys()|list}},
- datasets:[{label:'Skill Level',data:{{chart.values()|list}}}]
- }
-});
-</script>
+<input name="skills" placeholder="Your Skills (comma separated)" required>
 
-{% if u.role!="User" %}
-<hr><a href="/admin">Admin Panel</a>
+<button>Analyze Skills</button>
+</form>
+
+{% if result %}
+<hr>
+<h3>Hello {{ result.name }}</h3>
+<p><b>Career:</b> {{ result.career }}</p>
+
+{% if result.missing %}
+<p><b>Skills to Learn:</b></p>
+{% for s in result.missing %}
+<div class="skill">{{ s }}</div>
+{% endfor %}
+{% else %}
+<p>🎉 All required skills matched!</p>
 {% endif %}
-""", u=user, jobs=JOB_SKILLS, gap=gap, chart=chart, career=career, rec=RECOMMEND)
+{% endif %}
 
-# ---------------- ADMIN ----------------
+<a href="/admin">Go to Admin Dashboard</a>
+</div>
+
+</body>
+</html>
+""", result=result, jobs=JOB_SKILLS)
+
+# ---------------- ADMIN DASHBOARD ----------------
 @app.route("/admin")
 def admin():
-    if not login_required(): return redirect("/")
-    if session["user"]["role"]=="User": return "Access Denied"
-
-    db = get_db()
-    users = db.execute("SELECT * FROM users").fetchall()
-    db.close()
+    conn = get_db()
+    students = conn.execute("SELECT * FROM students").fetchall()
+    conn.close()
 
     return render_template_string("""
-    <h2>Admin Dashboard</h2>
-    <table border=1>
-    <tr><th>Name</th><th>Email</th><th>Role</th><th>Dept</th></tr>
-    {% for u in users %}
-    <tr>
-    <td>{{u.name}}</td><td>{{u.email}}</td>
-    <td>{{u.role}}</td><td>{{u.department}}</td>
-    </tr>
-    {% endfor %}
-    </table>
-    <a href="/dashboard">Back</a>
-    """, users=users)
+<!DOCTYPE html>
+<html>
+<head>
+<title>Admin Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Arial;background:#f4f6f8;padding:20px}
+table{width:100%;border-collapse:collapse;background:white}
+th,td{border:1px solid #ccc;padding:8px;text-align:left}
+th{background:#ddd}
+h2{text-align:center}
+</style>
+</head>
 
-# ---------------- RUN ----------------
+<body>
+<h2>Admin Dashboard – All Students Data</h2>
+
+<table>
+<tr>
+<th>ID</th>
+<th>Name</th>
+<th>Career</th>
+<th>Current Skills</th>
+<th>Missing Skills</th>
+</tr>
+
+{% for s in students %}
+<tr>
+<td>{{ s.id }}</td>
+<td>{{ s.name }}</td>
+<td>{{ s.career }}</td>
+<td>{{ s.current_skills }}</td>
+<td>{{ s.missing_skills }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<p style="text-align:center;margin-top:20px;">
+<a href="/">← Back to User Page</a>
+</p>
+</body>
+</html>
+""", students=students)
+
+# ---------------- RUN (RENDER SAFE) ----------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
