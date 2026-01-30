@@ -1,184 +1,75 @@
-from flask import Flask, request, render_template_string
-import sqlite3
-import os
+# app.py
+from flask import Flask, render_template, request, redirect, url_for, session
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.secret_key = "your_secret_key"
 
-# ---------------- DATABASE ----------------
-DB_NAME = "skills.db"
+# SQLite database (you can change to PostgreSQL if on Render)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def get_db():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+# User model
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
 
-def init_db():
-    conn = get_db()
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS students (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        career TEXT,
-        current_skills TEXT,
-        missing_skills TEXT
-    )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# ---------------- JOB SKILLS ----------------
-JOB_SKILLS = {
-    "Data Scientist": ["Python", "Statistics", "Machine Learning", "SQL"],
-    "Web Developer": ["HTML", "CSS", "JavaScript", "Flask"],
-    "AI Engineer": ["Python", "Deep Learning", "TensorFlow", "Maths"],
-    "Cyber Security": ["Networking", "Linux", "Ethical Hacking"]
-}
-
-# ---------------- HOME (USER PAGE) ----------------
-@app.route("/", methods=["GET", "POST"])
+# Home route -> redirect to login
+@app.route('/')
 def home():
-    result = None
+    return redirect(url_for('login'))
 
-    if request.method == "POST":
-        name = request.form["name"]
-        career = request.form["career"]
-        skills = [s.strip().lower() for s in request.form["skills"].split(",")]
+# Register route
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        if not email or not password:
+            return "Please provide email and password", 400
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return "User already exists"
+        hashed_password = generate_password_hash(password, method='sha256')
+        new_user = User(email=email, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('login'))
+    return render_template('register.html')
 
-        required = [r.lower() for r in JOB_SKILLS[career]]
-        missing = list(set(required) - set(skills))
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        if not email or not password:
+            return "Please provide email and password", 400
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            return redirect(url_for('dashboard'))
+        return "Invalid credentials"
+    return render_template('login.html')
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO students (name, career, current_skills, missing_skills) VALUES (?, ?, ?, ?)",
-            (
-                name,
-                career,
-                ", ".join(skills),
-                ", ".join(missing)
-            )
-        )
-        conn.commit()
-        conn.close()
+# Dashboard route
+@app.route('/dashboard')
+def dashboard():
+    if 'user_id' in session:
+        return f"Welcome! You are logged in. User ID: {session['user_id']}"
+    return redirect(url_for('login'))
 
-        result = {
-            "name": name,
-            "career": career,
-            "missing": missing
-        }
+# Logout route
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('login'))
 
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Skill Gap Intelligence System</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:Arial;background:#f2f4f7;padding:20px}
-.card{background:#fff;max-width:420px;margin:auto;padding:20px;border-radius:12px;box-shadow:0 0 10px #ccc}
-input,select,button{width:100%;padding:12px;margin-top:10px;border-radius:6px;border:1px solid #ccc}
-button{background:#4CAF50;color:white;border:none;font-size:16px}
-.skill{background:#eee;padding:8px;margin-top:6px;border-radius:5px}
-a{display:block;text-align:center;margin-top:15px}
-</style>
-</head>
-
-<body>
-
-<div class="card">
-<h2>Skill Gap Intelligence System</h2>
-
-<form method="post">
-<input name="name" placeholder="Student Name" required>
-
-<select name="career" required>
-<option value="">Select Career</option>
-{% for c in jobs %}
-<option>{{ c }}</option>
-{% endfor %}
-</select>
-
-<input name="skills" placeholder="Your Skills (comma separated)" required>
-
-<button>Analyze Skills</button>
-</form>
-
-{% if result %}
-<hr>
-<h3>Hello {{ result.name }}</h3>
-<p><b>Career:</b> {{ result.career }}</p>
-
-{% if result.missing %}
-<p><b>Skills to Learn:</b></p>
-{% for s in result.missing %}
-<div class="skill">{{ s }}</div>
-{% endfor %}
-{% else %}
-<p>🎉 All required skills matched!</p>
-{% endif %}
-{% endif %}
-
-<a href="/admin">Go to Admin Dashboard</a>
-</div>
-
-</body>
-</html>
-""", result=result, jobs=JOB_SKILLS)
-
-# ---------------- ADMIN DASHBOARD ----------------
-@app.route("/admin")
-def admin():
-    conn = get_db()
-    students = conn.execute("SELECT * FROM students").fetchall()
-    conn.close()
-
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:Arial;background:#f4f6f8;padding:20px}
-table{width:100%;border-collapse:collapse;background:white}
-th,td{border:1px solid #ccc;padding:8px;text-align:left}
-th{background:#ddd}
-h2{text-align:center}
-</style>
-</head>
-
-<body>
-<h2>Admin Dashboard – All Students Data</h2>
-
-<table>
-<tr>
-<th>ID</th>
-<th>Name</th>
-<th>Career</th>
-<th>Current Skills</th>
-<th>Missing Skills</th>
-</tr>
-
-{% for s in students %}
-<tr>
-<td>{{ s.id }}</td>
-<td>{{ s.name }}</td>
-<td>{{ s.career }}</td>
-<td>{{ s.current_skills }}</td>
-<td>{{ s.missing_skills }}</td>
-</tr>
-{% endfor %}
-</table>
-
-<p style="text-align:center;margin-top:20px;">
-<a href="/">← Back to User Page</a>
-</p>
-</body>
-</html>
-""", students=students)
-
-# ---------------- RUN (RENDER SAFE) ----------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# Run app
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()  # Create DB tables
+    app.run(debug=True)
