@@ -63,30 +63,14 @@ def login():
         return "Invalid login"
 
     return """
-<!DOCTYPE html>
-<html>
-<head>
-  <title>College App</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="manifest" href="/static/manifest.json">
-</head>
-<body>
-<h2>College Login</h2>
-<form method="post">
-Email:<input name="email"><br>
-Password:<input type="password" name="password"><br>
-<button>Login</button>
-</form>
-<a href="/register">Register</a>
-
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/static/service-worker.js");
-}
-</script>
-</body>
-</html>
-"""
+    <h2>College Login</h2>
+    <form method="post">
+        Email:<input name="email"><br>
+        Password:<input type="password" name="password"><br>
+        <button>Login</button>
+    </form>
+    <a href="/register">Register</a>
+    """
 
 # ---------- REGISTER ----------
 @app.route("/register", methods=["GET", "POST"])
@@ -114,19 +98,19 @@ def register():
         return "Registered. Wait for admin approval."
 
     return """
-<h2>Register</h2>
-<form method="post">
-Email:<input name="email"><br>
-Password:<input type="password" name="password"><br>
-Role:
-<select name="role">
-<option value="student">Student</option>
-<option value="faculty">Faculty</option>
-</select><br>
-Secret Code:<input name="code"><br>
-<button>Register</button>
-</form>
-"""
+    <h2>Register</h2>
+    <form method="post">
+        Email:<input name="email"><br>
+        Password:<input type="password" name="password"><br>
+        Role:
+        <select name="role">
+            <option value="student">Student</option>
+            <option value="faculty">Faculty</option>
+        </select><br>
+        Secret Code:<input name="code"><br>
+        <button>Register</button>
+    </form>
+    """
 
 # ---------- DASHBOARD ----------
 @app.route("/dashboard")
@@ -135,10 +119,10 @@ def dashboard():
     role = session.get("role")
     admin_link = "<a href='/admin'>Admin Panel</a>" if role == "admin" else ""
     return f"""
-<h2>{role.capitalize()} Dashboard</h2>
-{admin_link}<br><br>
-<a href="/logout">Logout</a>
-"""
+    <h2>{role.capitalize()} Dashboard</h2>
+    {admin_link}<br><br>
+    <a href="/logout">Logout</a>
+    """
 
 # ---------- ADMIN ----------
 @app.route("/admin")
@@ -176,6 +160,3 @@ def generate_code():
 def logout():
     session.clear()
     return redirect("/")
-
-# ---------- RUN ----------
-app.run(host="0.0.0.0", port=3000)
