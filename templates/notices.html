@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><title>Notices</title></head>
+<body>
+<h2>Notices</h2>
+<ul>
+{% for notice in notices %}
+<li><strong>{{ notice['title'] }}</strong>: {{ notice['content'] }} (Posted by {{ notice['posted_by'] }})</li>
+{% endfor %}
+</ul>
+<a href="{{ url_for('student_dashboard') }}">Back</a>
+</body>
+</html>
